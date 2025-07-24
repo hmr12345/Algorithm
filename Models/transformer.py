@@ -18,30 +18,69 @@ class PositionalEncoding(nn.Module):
 
 class MultiHeadAttention(nn.Module):
     """多头自注意力机制"""
-    def __init__(self, d_model, num_heads):
+    # def __init__(self, d_model, num_heads):
+    #     super().__init__()
+    #     assert d_model % num_heads == 0
+    #     self.d_k = d_model // num_heads
+    #     self.num_heads = num_heads
+    #     self.W_q = nn.Linear(d_model, d_model)
+    #     self.W_k = nn.Linear(d_model, d_model)
+    #     self.W_v = nn.Linear(d_model, d_model)
+    #     self.W_o = nn.Linear(d_model, d_model)
+
+    # def forward(self, x):
+    #     batch_size, seq_len, _ = x.size()
+    #     # 线性变换并分头 [batch, seq_len, num_heads, d_k]
+    #     q = self.W_q(x).view(batch_size, seq_len, self.num_heads, self.d_k).transpose(1, 2)
+    #     k = self.W_k(x).view(batch_size, seq_len, self.num_heads, self.d_k).transpose(1, 2)
+    #     v = self.W_v(x).view(batch_size, seq_len, self.num_heads, self.d_k).transpose(1, 2)
+    #     # 计算注意力权重
+    #     scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.d_k)
+    #     attn_weights = torch.softmax(scores, dim=-1)
+    #     # 加权求和
+    #     output = torch.matmul(attn_weights, v)
+    #     # 合并多头
+    #     output = output.transpose(1, 2).contiguous().view(batch_size, seq_len, -1)
+    #     return self.W_o(output)
+    def __init__(self, input_dim=120, d_model=128, num_heads=8, num_layers=4, num_classes=3):
         super().__init__()
-        assert d_model % num_heads == 0
-        self.d_k = d_model // num_heads
-        self.num_heads = num_heads
-        self.W_q = nn.Linear(d_model, d_model)
-        self.W_k = nn.Linear(d_model, d_model)
-        self.W_v = nn.Linear(d_model, d_model)
-        self.W_o = nn.Linear(d_model, d_model)
+        # 1. 输入嵌入层（将120维触觉点映射到d_model）
+        self.embedding = nn.Linear(input_dim, d_model)
+        
+        # 2. 时空位置编码
+        self.time_pos = nn.Parameter(torch.randn(1, X.shape[1], d_model))  # 时间位置
+        self.space_pos = nn.Parameter(torch.randn(1, 1, input_dim, d_model))  # 空间位置
+        
+        # 3. Transformer编码器
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=num_heads, dim_feedforward=4*d_model
+        )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        
+        # 4. 分类头
+        self.cls_token = nn.Parameter(torch.randn(1, 1, d_model))
+        self.classifier = nn.Linear(d_model, num_classes)
 
     def forward(self, x):
-        batch_size, seq_len, _ = x.size()
-        # 线性变换并分头 [batch, seq_len, num_heads, d_k]
-        q = self.W_q(x).view(batch_size, seq_len, self.num_heads, self.d_k).transpose(1, 2)
-        k = self.W_k(x).view(batch_size, seq_len, self.num_heads, self.d_k).transpose(1, 2)
-        v = self.W_v(x).view(batch_size, seq_len, self.num_heads, self.d_k).transpose(1, 2)
-        # 计算注意力权重
-        scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.d_k)
-        attn_weights = torch.softmax(scores, dim=-1)
-        # 加权求和
-        output = torch.matmul(attn_weights, v)
-        # 合并多头
-        output = output.transpose(1, 2).contiguous().view(batch_size, seq_len, -1)
-        return self.W_o(output)
+        # x: [batch, time_steps, 120]
+        batch_size = x.size(0)
+        
+        # 嵌入+空间位置编码
+        x = self.embedding(x)  # [batch, time, d_model]
+        x = x + self.space_pos.expand(batch_size, -1, -1, -1).mean(dim=2)  # 空间编码
+        
+        # 添加时间位置编码和CLS token
+        x = x + self.time_pos
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        x = torch.cat([cls_tokens, x], dim=1)  # [batch, time+1, d_model]
+        
+        # Transformer处理（调整维度为[time+1, batch, d_model]）
+        x = x.permute(1, 0, 2)
+        x = self.transformer(x)
+        
+        # 取CLS token输出
+        cls_output = x[0]
+        return self.classifier(cls_output)
 
 class TransformerBlock(nn.Module):
     """单个Transformer层（多头注意力 + 前馈网络）"""
