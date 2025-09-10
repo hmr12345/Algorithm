@@ -107,7 +107,7 @@ def create_heatmap_frames(timestamps, sensor_data, output_dir='frames', componen
     
     return frames
 
-def create_video(frames, output_file='heatmap_video.mp4', fps=10):
+def create_video(frames, output_file='cardboard3.mp4', fps=10):
     """
     从帧图像创建视频
     """
@@ -119,7 +119,7 @@ def create_video(frames, output_file='heatmap_video.mp4', fps=10):
 
 def main():
     # 输入文件路径
-    input_file = r'D:\VS Repository\Algorithm\Datatest\cardboard_data1.csv'
+    input_file = r'D:\VS Repository\Algorithm\Dataset\cardboard\2025-07-29-172519.csv'
     
     # 处理数据
     timestamps, sensor_data = process_data(input_file)
